@@ -100,6 +100,7 @@ kick in. Block its path with a chair in RViz's view to trigger them live.
 | `acadbot_gazebo`      | Gazebo Harmonic world, robot spawn, `ros_gz` bridge |
 | `acadbot_control`     | **C++** nodes: `square_driver` (drift demo), `patrol_commander` (Nav2 client) |
 | `acadbot_slam`        | `slam_toolbox` mapping + localization configs/launch |
+| `acadbot_localization`| AMCL + saved-map setup via `localization.launch.py`, plus `localization_monitor` |
 | `acadbot_navigation`  | Nav2 params (incl. recovery behaviors), maps, launch |
 | `acadbot_bringup`     | One-command launch files per session |
 
@@ -116,8 +117,9 @@ PR, review — is in [`CONTRIBUTING.md`](CONTRIBUTING.md). Read it once in week 
 
 | Argument | Applies to | Default | Why you'd change it |
 |---|---|---|---|
-| `headless:=true` | `simulation`, `mapping`, `autonomy` | `false` | Gazebo server only — no GUI, no GPU. Needed for CI and for machines with no working X. |
-| `rviz:=false` | `mapping`, `autonomy` | `true` | Skip RViz2 for the same reason. |
+| `headless:=true` | `simulation`, `mapping`, `autonomy`, `localization` | `false` | Gazebo server only — no GUI, no GPU. Needed for CI and for machines with no working X. |
+| `rviz:=false` | `mapping`, `autonomy`, `localization` | `true` | Skip RViz2 for the same reason. |
+| `map:=<path>` | `localization` | `acadbot_navigation/maps/academy_map.yaml` | Load a saved occupancy grid and localize against it with AMCL instead of building a map live. |
 | `localization:=amcl` | `autonomy`, `navigation` | `slam` | Use AMCL + `map_server` on the `.yaml` grid instead of slam_toolbox on the pose graph. |
 | `nav2_delay:=<sec>` | `autonomy`, `navigation` | `12.0` | How long to wait for localization before starting Nav2. Raise it if you see `Failed to change state for node: controller_server`. |
 
