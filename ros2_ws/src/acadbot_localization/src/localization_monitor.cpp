@@ -13,12 +13,35 @@ class LocalizationMonitor : public rclcpp::Node
             report_period_ = declare_parameter<double>("report_period", 1.0);
             // it is considered converged if the stddev is less than this many meters
             converged_sigma_ = declare_parameter<double>("converged_sigma", 0.25);
+            pose_sub_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+            "/amcl_pose",
+            10,
+            std::bind(&LocalizationMonitor::pose_callback, this, std::placeholders::_1));
         }
 
     private:
         double report_period_;
         double converged_sigma_;
+            // latest AMCL estimate we've received, if any
+        geometry_msgs::msg::PoseWithCovarianceStamped latest_pose_;
+        bool has_pose_ = false;
+
+        rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr pose_sub_;
+
+        void pose_callback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
+        {
+            latest_pose_ = *msg;
+            has_pose_ = true;
+        }
 };
+
+int main(int argc, char * argv[])
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<LocalizationMonitor>());
+    rclcpp::shutdown();
+    return 0;
+}
 
 // 2. The C++ node
 // localization_monitor answers a question RViz only answers by eye: is AMCL actually localised, or is it just running?
