@@ -1,0 +1,4 @@
+localization_monitor:
+  ros__parameters:
+    report_period: 1.0      # seconds between logged status lines
+    converged_sigma: 0.25   # pose uncertainty, in metres, less than this counts as CONVERGED

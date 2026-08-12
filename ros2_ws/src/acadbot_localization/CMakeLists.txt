@@ -11,15 +11,16 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
 
 # localization_monitor
-# uncomment once src/localization_monitor.cpp exists.
-# add_executable(localization_monitor src/localization_monitor.cpp)
-# ament_target_dependencies(localization_monitor rclcpp geometry_msgs)
-#
-# install(TARGETS
-#   localization_monitor
-#   DESTINATION lib/${PROJECT_NAME})
+add_executable(localization_monitor src/localization_monitor.cpp)
+ament_target_dependencies(localization_monitor rclcpp geometry_msgs tf2 tf2_geometry_msgs)
+
+install(TARGETS
+   localization_monitor
+   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch config
   DESTINATION share/${PROJECT_NAME})
