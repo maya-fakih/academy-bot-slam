@@ -67,19 +67,19 @@ good — operational, not architectural, wire in near the end via
 
 ## 3. Concurrency / job admission
 
-**OPEN — contradicts itself in the current notes, needs one more pass.**
-Two behaviors were both described and they are opposites:
+**DECIDED: queue.** A second request while a job is active is accepted
+(gets a job ID) and waits; the dispatcher starts it automatically once the
+active job finishes. Not reject-if-busy — the earlier "dropped if it can't do
+it right now" framing is superseded by this.
 
-- "Queue tasks" → job B waits, runs automatically after job A finishes.
-- "If it can't do it right now it's dropped" (the 'smart mesh' framing) →
-  reject-if-busy, job B never runs unless re-requested.
-
-Physical constraint either way: one robot, one Nav2 client, only one job
-can ever be *executing* at a time — this is not about true concurrency, only
+Physical constraint either way: one robot, one Nav2 client, only one job can
+ever be *executing* at a time — this was never about true concurrency, only
 about what the dispatcher does with an incoming request while another job is
-active. Resolve next session before touching the dispatcher's state machine;
-the two `.srv`/`.action` result fields (and the rejection-reason wording)
-depend on which one we pick.
+active. Still open, as a follow-on from choosing queue: does the accept
+*reply* say "accepted, executing now" vs "accepted, queued behind job X"
+differently, or is that distinction left to the feedback stream once the job
+starts executing? Not blocking — can be decided when the `.srv` response
+fields get drafted.
 
 ## 4. Failure / retry semantics
 
