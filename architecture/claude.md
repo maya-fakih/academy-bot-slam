@@ -45,7 +45,7 @@ async or separation of concerns.
 
 - Never work directly on `main`. `main` is authoritative and kept up to date
   by the course; Maya branches off it.
-- Branch: `final_project/maya` is the main working branch for this project.
+- Branch: `final_project/maya_fakih` is the main working branch for this project.
   Feature-specific work happens on its own branch off `final_project/maya`,
   tested, then merged back — not built directly on the working branch.
 - She wants `ros2 bag record`/`play` wired in around the feedback/status
