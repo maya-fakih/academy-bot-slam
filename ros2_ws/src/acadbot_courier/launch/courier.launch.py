@@ -17,6 +17,10 @@ def generate_launch_description():
     bringup_share = get_package_share_directory('acadbot_bringup')
     courier_share = get_package_share_directory('acadbot_courier')
 
+    # Reuse the existing `autonomy.launch.py` from `acadbot_bringup` which
+    # brings up simulation, Nav2, AMCL (or SLAM depending on args), and all
+    # required infrastructure. We forward the `localization=amcl` argument to
+    # request AMCL-based localization here (map_server + amcl lifecycle nodes).
     autonomy_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(bringup_share, 'launch', 'autonomy.launch.py')
@@ -24,6 +28,11 @@ def generate_launch_description():
         launch_arguments={'localization': 'amcl'}.items(),
     )
 
+    # Start the dispatcher node which reads `courier_params.yaml` for
+    # location definitions and retry/timeouts. Parameters are passed by
+    # filename (rclcpp will load the YAML into the node's parameter server).
+    # The Node's lifetime is managed by the launch system; when the launch
+    # exits the Node is torn down cleanly (RAII semantics via launch).
     dispatcher_node = Node(
         package='acadbot_courier',
         executable='dispatcher',

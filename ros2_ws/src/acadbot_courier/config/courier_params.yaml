@@ -1,10 +1,25 @@
+# courier_params.yaml
+# Configuration for the `dispatcher` node. All values here are loaded as
+# ROS 2 parameters at node startup. Change these values to tune retry behavior,
+# timeouts, or to add/remove named locations without recompiling.
 dispatcher:
   ros__parameters:
+    # How many times to retry a single leg (pickup or dropoff) before
+    # declaring the whole job failed. Retries are per-leg, not per-job.
     retry_limit: 2
+
+    # How long (seconds) to let a leg run before cancelling it and treating
+    # it as a failure eligible for retry. Set high if your environment is
+    # slow or Nav2 needs more recovery attempts.
     leg_timeout_sec: 200.0
 
+    # Canonical list of location names the courier accepts in service/action
+    # requests. Keep this list in sync with the `locations:` map below.
     location_names: ["reception", "lab_bench", "far_corner", "near_corner", "hallway", "wide_area", "cylinder_area"]
 
+    # Named map-frame poses. Each entry is a {x, y, yaw} triple in metres and
+    # radians, expressed in the `map` frame used by AMCL. These are the
+    # coordinates the dispatcher converts into Nav2 `navigate_to_pose` goals.
     locations:
       reception:          # spawn point, bottom-left room, near origin
         x: 0.0

@@ -52,3 +52,19 @@ private:
   GoalHandle::SharedPtr current_goal_handle_;
   bool goal_active_{false};
 };
+
+// Detailed ownership notes (read before modifying):
+// - `node_` is a non-owning raw pointer to the rclcpp::Node that created
+//   the Executor. The caller (usually a Node-derived object) must ensure
+//   the Node outlives this Executor. This avoids shared_ptr cycles with the
+//   rclcpp executor and keeps the lifetime model simple.
+// - `client_` is a SharedPtr returned by `rclcpp_action::create_client` and
+//   follows RAII: it will be cleaned up automatically when the Executor is
+//   destroyed.
+// - `current_goal_handle_` is a SharedPtr to the active goal handle. We keep
+//   a copy so we can cancel the goal; the handle is cleared in the result
+//   callback to break ownership and allow resources to be reclaimed.
+// Threading notes:
+// - Callbacks registered with the action client are invoked on rclcpp's
+//   executor threads. Do not mutate shared application state from those
+//   callbacks without proper synchronization (mutex/atomic) in the caller.

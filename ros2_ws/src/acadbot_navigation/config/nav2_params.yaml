@@ -93,6 +93,19 @@ controller_server:
       PathDist.scale: 32.0       # weight: reward staying close to the global path
       GoalDist.scale: 24.0       # weight: reward getting closer to the goal
       RotateToGoal.scale: 32.0   # weight: reward rotating in place to face goal near the end
+      # DWB tuning notes:
+      # - `sim_time` controls how far ahead each candidate trajectory is
+      #   simulated. Longer sim_time makes planning consider longer motions
+      #   (better for faster robots) but increases CPU usage and may react
+      #   slower to dynamic obstacles.
+      # - `vx_samples` and `vtheta_samples` determine the discrete set of
+      #   velocities the planner explores each cycle. Increasing samples gives
+      #   higher-quality plans at the cost of compute. Reduce for low-CPU
+      #   hardware or increase if oscillations/poor trajectories occur.
+      # - `critics` are modular scoring functions. Weights like `PathAlign.scale`
+      #   and `BaseObstacle.scale` balance path-following vs obstacle avoidance.
+      #   If the robot hugs obstacles, increase `BaseObstacle.scale` or
+      #   increase `inflation_radius` in the costmap.
 
 local_costmap:
   local_costmap:
@@ -120,10 +133,24 @@ local_costmap:
           data_type: "LaserScan"
           raytrace_max_range: 12.0  # max range used to clear free space along a ray
           obstacle_max_range: 10.0  # max range used to mark obstacles
+        # Obstacle layer notes:
+        # - `marking` controls whether new points mark cells as occupied.
+        # - `clearing` allows sensor rays to mark cells as free again (useful
+        #   for removing spurious obstacles). For sensors that do not provide
+        #   full ray coverage, disabling `clearing` can prevent false frees.
+        # - `raytrace_max_range` controls clearing reach; if set too long a
+        #   short, stale measurements can wrongly clear obstacles.
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
         cost_scaling_factor: 3.0   # how sharply cost decays with distance from obstacle
         inflation_radius: 0.45     # how far (m) obstacle "danger zone" extends — this is the pink/cyan halo you saw in RViz
+      # Inflation/footprint notes:
+      # - `inflation_radius` + robot footprint size determine how close the
+      #   planner will route to obstacles. Use a slightly larger inflation to
+      #   give controllers more margin, at the cost of narrower passages.
+      # - `robot_radius` is used as a simplified circular footprint. For
+      #   asymmetric robots prefer a polygonal footprint published on
+      #   `local_costmap/published_footprint` (the behavior server reads it).
 
 global_costmap:
   global_costmap:
@@ -140,6 +167,12 @@ global_costmap:
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: true  # QoS setting matching map_server's transient-local publish
+      # Static layer notes:
+      # - `map_subscribe_transient_local` should match the map_server's QoS
+      #   so late-joining lifecycle nodes can still receive the map snapshot.
+      # - The static layer defines permanent obstacles from the occupancy
+      #   grid. If you modify the map on-the-fly (unlikely), call the map
+      #   server's `change_maps` service or republish the map with transient-local.
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: true
@@ -165,8 +198,20 @@ planner_server:
     GridBased:
       plugin: "nav2_navfn_planner::NavfnPlanner"  # Dijkstra/A*-style grid planner
       tolerance: 0.5      # how close to the exact goal cell a plan may terminate (m)
-      use_astar: false    # false = Dijkstra (uniform cost search), true = A*
+      use_astar: true    # false = Dijkstra (uniform cost search), true = A*
       allow_unknown: true # allow planning through unexplored map cells
+      # Algorithm notes:
+      # - Dijkstra (`use_astar: false`) explores uniform-cost frontiers and
+      #   is deterministic given identical costs; A* (`use_astar: true`) uses
+      #   a heuristic (usually Euclidean) to speed planning by guiding search
+      #   toward the goal. A* is typically faster on large maps if your
+      #   heuristic is admissible (never overestimates). If your map has
+      #   non-uniform traversal costs or you rely on `allow_unknown`, prefer
+      #   A* for lower latency.
+      # - `allow_unknown: true` lets the planner route through unknown grid
+      #   cells. This is useful in partially-explored environments but may
+      #   cause the planner to route through areas that are actually blocked.
+      #   If you operate in a mapped, static world prefer `allow_unknown: false`.
 
 # *** RECOVERY BEHAVIORS *** — what runs when the planner/controller gets stuck.
 # This is what requirement 7 relies on: Nav2 tries these before finally
@@ -194,6 +239,18 @@ behavior_server:
     global_frame: map
     robot_base_frame: base_link
     transform_tolerance: 0.2
+    # Recovery behavior notes:
+    # - When the planner/controller detects a failure, Nav2 will invoke a
+    #   sequence of recovery actions (from `behavior_plugins`) to try to
+    #   recover before finally aborting the goal. Order and selection matter.
+    # - `spin` is useful to clear transient obstacles and to help AMCL
+    #   re-localize by getting a better laser view. `backup` reverses away
+    #   from obstacles; use with care in cluttered areas. `drive_on_heading`
+    #   can nudge the robot forward along a heading when the controller
+    #   stalls. `wait` simply pauses allowing dynamic obstacles to clear.
+    # - If your robot frequently aborts due to oscillation, enable the
+    #   `Oscillation` critic in DWB and tune its threshold instead of relying
+    #   solely on recoveries.
     simulate_ahead_time: 2.0     # seconds of lookahead when checking recovery motions for safety
     max_rotational_vel: 1.0      # spin recovery's max angular speed
     min_rotational_vel: 0.4      # spin recovery's min angular speed
