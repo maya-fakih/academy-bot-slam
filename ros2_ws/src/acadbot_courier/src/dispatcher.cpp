@@ -1,9 +1,10 @@
 // dispatcher.cpp
 // ---------------------------------------------------------------------------
-// Dispatcher node — STAGE 3: adds the ExecuteDelivery action server, real
-// two-leg driving (pickup then dropoff), per-leg retries, and honest
-// success/failure reporting. This covers requirements 1-8; requirement 9
-// (single launch) is separate, not in this file.
+// Dispatcher node — FINAL: RequestDelivery service, ExecuteDelivery action
+// server, queued two-leg driving via Executor, per-leg retries, per-leg
+// timeouts, and a clean distinction between "requester cancelled" (job ends
+// CANCELED, no retry) and "leg timed out" (treated as a normal leg failure,
+// eligible for retry like any other Nav2 failure).
 // ---------------------------------------------------------------------------
 #include <deque>
 #include <map>
@@ -26,11 +27,15 @@ struct LocationPose { double x, y, yaw; };
 // A queued/running job. goal_handle is null until the requester actually
 // calls the ExecuteDelivery action for this job_id — feedback/result only
 // get published once that happens; the job still runs either way.
+// cancel_requested distinguishes "requester hit cancel" (job ends CANCELED,
+// no more retries) from a leg timing out internally (still just a failure,
+// eligible for retry).
 struct Job
 {
   std::string job_id;
   std::string pickup, dropoff;
   std::shared_ptr<GoalHandleExecuteDelivery> goal_handle;
+  bool cancel_requested{false};
 };
 
 class Dispatcher : public rclcpp::Node
@@ -40,6 +45,7 @@ public:
   {
     loadLocations();
     retry_limit_ = declare_parameter<int>("retry_limit", 2);
+    leg_timeout_sec_ = declare_parameter<double>("leg_timeout_sec", 60.0);
     executor_ = std::make_unique<Executor>(this);
 
     service_ = create_service<RequestDelivery>(
@@ -55,8 +61,8 @@ public:
       std::bind(&Dispatcher::handleAccepted, this, std::placeholders::_1));
 
     RCLCPP_INFO(get_logger(),
-      "dispatcher ready — %zu known locations, retry_limit=%d.",
-      locations_.size(), retry_limit_);
+      "dispatcher ready — %zu known locations, retry_limit=%d, leg_timeout_sec=%.1f.",
+      locations_.size(), retry_limit_, leg_timeout_sec_);
   }
 
 private:
@@ -113,12 +119,11 @@ private:
                 job_id.c_str(), req->pickup.c_str(), req->dropoff.c_str());
 
     std::lock_guard<std::mutex> lock(mutex_);
-    queue_.push_back({job_id, req->pickup, req->dropoff, nullptr});
+    queue_.push_back({job_id, req->pickup, req->dropoff, nullptr, false});
     tryStartNext();
   }
 
   // ---- ExecuteDelivery action server (requirements 3, 4, 6) --------------
-  // Accept only goals whose job_id was actually handed out by the service.
   rclcpp_action::GoalResponse handleGoal(
     const rclcpp_action::GoalUUID &,
     std::shared_ptr<const ExecuteDelivery::Goal> goal)
@@ -138,11 +143,15 @@ private:
   }
 
   rclcpp_action::CancelResponse handleCancel(
-    const std::shared_ptr<GoalHandleExecuteDelivery>)
+    const std::shared_ptr<GoalHandleExecuteDelivery> gh)
   {
-    // Cancel means stop (requirement 6) — always allow it, cancel the
-    // in-flight Nav2 goal immediately. The executor's done callback fires
-    // afterwards and finishes the action as CANCELED.
+    // Requirement 6: cancel means stop, promptly, reported as CANCELED —
+    // never retried afterwards. Mark the job so onLegDone knows this
+    // cancellation came from the requester, not from our own timeout.
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (running_job_ && running_job_->goal_handle == gh) {
+      running_job_->cancel_requested = true;
+    }
     executor_->cancel();
     return rclcpp_action::CancelResponse::ACCEPT;
   }
@@ -159,7 +168,7 @@ private:
     }
   }
 
-  // ---- driving (requirements 3, 4, 5, 6, 7) -------------------------------
+  // ---- driving (requirements 3, 4, 5, 6, 7, 8) ----------------------------
   void tryStartNext()
   {
     if (running_job_ || queue_.empty()) return;
@@ -179,18 +188,37 @@ private:
   void driveLeg(const std::string & leg, const std::string & location_name,
                 int attempt)
   {
-    auto job = running_job_;  // keep alive across the async callback
+    auto job = running_job_;  // keep alive across async callbacks
     auto p = locations_.at(location_name);
 
     publishFeedback(job, leg, location_name, p, -1.0);
+
+    // One-shot timeout: if the leg hasn't finished in leg_timeout_sec, cancel
+    // the executor ourselves. leg_timed_out_ tells onLegDone this CANCELED
+    // came from us, not the requester, so it's treated as a failure (and can
+    // still retry) rather than ending the whole job.
+    auto leg_timed_out = std::make_shared<bool>(false);
+    auto timeout_timer = create_wall_timer(
+      std::chrono::duration<double>(leg_timeout_sec_),
+      [this, job, leg, leg_timed_out]() {
+        RCLCPP_WARN(get_logger(), "[%s] %s leg timed out after %.1fs — canceling.",
+                    job->job_id.c_str(), leg.c_str(), leg_timeout_sec_);
+        *leg_timed_out = true;
+        executor_->cancel();
+      });
 
     executor_->driveTo(p.x, p.y, p.yaw, "map",
       [this, job, leg, location_name, p](double dist) {
         publishFeedback(job, leg, location_name, p, dist);
       },
-      [this, job, leg, location_name, attempt](bool success,
-                                                 const std::string & reason) {
-        onLegDone(job, leg, location_name, attempt, success, reason);
+      [this, job, leg, location_name, attempt, timeout_timer, leg_timed_out]
+      (bool success, const std::string & reason) {
+        timeout_timer->cancel();
+        std::string effective_reason = reason;
+        if (*leg_timed_out && !success) {
+          effective_reason = "leg timeout";
+        }
+        onLegDone(job, leg, location_name, attempt, success, effective_reason);
       });
   }
 
@@ -223,11 +251,14 @@ private:
       return;
     }
 
-    if (reason == "canceled") {
+    // Requester-initiated cancel always wins: stop retrying, end CANCELED.
+    if (job->cancel_requested) {
       finish(job, false, "canceled by requester", leg);
       return;
     }
 
+    // Any other failure (Nav2 aborted, rejected, or our own timeout) is
+    // treated the same way: retry up to retry_limit, then give up honestly.
     if (attempt + 1 < retry_limit_) {
       RCLCPP_WARN(get_logger(), "[%s] %s leg failed (%s) — retry %d/%d",
                   job->job_id.c_str(), leg.c_str(), reason.c_str(),
@@ -236,14 +267,15 @@ private:
       return;
     }
 
-    RCLCPP_ERROR(get_logger(), "[%s] %s leg failed after %d attempts — giving up.",
-                 job->job_id.c_str(), leg.c_str(), retry_limit_);
+    RCLCPP_ERROR(get_logger(), "[%s] %s leg failed after %d attempts (%s) — giving up.",
+                 job->job_id.c_str(), leg.c_str(), retry_limit_, reason.c_str());
     finish(job, false, leg + " leg failed: " + reason, leg);
   }
 
-  // success=true -> SUCCEEDED. success=false + failed_leg empty -> this only
-  // happens on the cancel path, reported as CANCELED. success=false with a
-  // failed_leg -> retries exhausted, reported as ABORTED (requirement 7).
+  // success=true -> SUCCEEDED.
+  // job->cancel_requested -> CANCELED (requirement 6).
+  // otherwise (retries exhausted, including from timeouts) -> ABORTED,
+  // failed_leg names which leg (requirement 7).
   void finish(const std::shared_ptr<Job> & job, bool success,
               const std::string & message, const std::string & failed_leg)
   {
@@ -254,7 +286,7 @@ private:
       result->failed_leg = failed_leg;
       if (success) {
         job->goal_handle->succeed(result);
-      } else if (message == "canceled by requester") {
+      } else if (job->cancel_requested) {
         job->goal_handle->canceled(result);
       } else {
         job->goal_handle->abort(result);
@@ -276,6 +308,7 @@ private:
   std::shared_ptr<Job> running_job_;
 
   int retry_limit_{2};
+  double leg_timeout_sec_{60.0};
   int next_job_id_{0};
 };
 

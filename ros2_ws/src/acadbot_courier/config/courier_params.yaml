@@ -1,6 +1,7 @@
 dispatcher:
   ros__parameters:
     retry_limit: 2
+    leg_timeout_sec: 60.0
 
     location_names: ["reception", "lab_bench"]
 
