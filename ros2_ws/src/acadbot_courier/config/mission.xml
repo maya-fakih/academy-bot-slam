@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<!--
+mission.xml — the courier's own mission logic as a behavior tree.
+
+Shape: go to pickup, retrying up to N times if it fails; then go to
+dropoff, same retry policy. If pickup never succeeds, dropoff is never
+attempted (Sequence semantics — first child must succeed to proceed).
+
+This is the EXACT same policy driveLeg()/onLegDone() implemented in C++
+(architecture.md decision 4) — now readable/editable here instead of
+recompiled. num_attempts is fixed in this file; retry_limit from YAML is
+what BT.CPP calls num_attempts, so keep them in sync if you tune one.
+-->
+<root BTCPP_format="4">
+  <BehaviorTree ID="CourierMission">
+    <Sequence name="pickup_then_dropoff">
+
+      <RetryUntilSuccessful num_attempts="2" name="retry_pickup">
+        <DriveLeg leg="pickup"
+                  location_name="{pickup_name}"
+                  x="{pickup_x}" y="{pickup_y}" yaw="{pickup_yaw}" />
+      </RetryUntilSuccessful>
+
+      <RetryUntilSuccessful num_attempts="2" name="retry_dropoff">
+        <DriveLeg leg="dropoff"
+                  location_name="{dropoff_name}"
+                  x="{dropoff_x}" y="{dropoff_y}" yaw="{dropoff_yaw}" />
+      </RetryUntilSuccessful>
+
+    </Sequence>
+  </BehaviorTree>
+</root>
