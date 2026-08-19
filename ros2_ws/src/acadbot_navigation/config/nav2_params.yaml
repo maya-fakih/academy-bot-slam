@@ -69,10 +69,10 @@ controller_server:
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"  # Dynamic Window Approach local planner
       debug_trajectory_details: true       # verbose trajectory scoring logs
-      min_vel_x: 0.0             # min forward speed (m/s) — 0 allows stopping
-      max_vel_x: 0.26            # ← TOP SPEED forward (m/s). Lower this to slow the robot.
+      min_vel_x: 0.05            # min forward speed (m/s) — 0 allows stopping
+      max_vel_x: 0.05            # ← TOP SPEED forward (m/s). Lower this to slow the robot.
       min_vel_theta: 0.0         # min angular speed (rad/s)
-      max_vel_theta: 1.0         # max angular (turning) speed (rad/s)
+      max_vel_theta: 0.5     # max angular (turning) speed (rad/s)
       min_speed_xy: 0.0          # min combined linear speed
       max_speed_xy: 0.26         # ← TOP combined linear speed (m/s). Lower alongside max_vel_x.
       min_speed_theta: 0.0
@@ -226,8 +226,8 @@ velocity_smoother:
     smoothing_frequency: 20.0    # Hz output cmd_vel is smoothed/published at
     scale_velocities: false      # if true, scales all components together to respect limits; false = clip independently
     feedback: "OPEN_LOOP"        # no closed-loop correction, just smooths the commanded velocity
-    max_velocity: [0.26, 0.0, 1.0]   # ← [max linear x, max linear y (unused, diff-drive), max angular] m/s, rad/s
-    min_velocity: [-0.26, 0.0, -1.0] # ← same, negative direction (reverse/opposite turn)
+    max_velocity: [0.05, 0.0, 0.3]  # ← [max linear x, max linear y (unused, diff-drive), max angular] m/s, rad/s
+    min_velocity: [-0.05, 0.0, -0.3] # ← same, negative direction (reverse/opposite turn)
     max_accel: [1.0, 0.0, 2.0]       # max acceleration per axis
     max_decel: [-1.0, 0.0, -2.0]     # max deceleration per axis
     odom_topic: "odom"

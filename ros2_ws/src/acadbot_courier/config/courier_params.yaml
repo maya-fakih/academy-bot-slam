@@ -3,7 +3,7 @@ dispatcher:
     retry_limit: 2
     leg_timeout_sec: 60.0
 
-    location_names: ["reception", "lab_bench"]
+    location_names: ["reception", "lab_bench", "far_corner", "near_corner", "hallway", "wide_area", "cylinder_area"]
 
     locations:
       reception:
@@ -14,3 +14,23 @@ dispatcher:
         x: 4.5
         y: -1.2
         yaw: 1.57
+      far_corner:
+        x: 8.0
+        y: 0.0
+        yaw: 3.14
+      near_corner:
+        x: 6.0
+        y: 3.0
+        yaw: -1.57
+      hallway:
+        x: 2.0
+        y: 5.0
+        yaw: 0.0
+      wide_area:
+        x: 4.0
+        y: 4.0
+        yaw: 0.0
+      cylinder_area:
+        x: 5.0
+        y: 7.0
+        yaw: 0.0
