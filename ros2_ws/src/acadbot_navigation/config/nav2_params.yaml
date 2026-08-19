@@ -31,6 +31,14 @@ amcl:
     alpha4: 0.2
     update_min_a: 0.2
     update_min_d: 0.25
+    # Known spawn pose (README: Gazebo (-3,-2), map = gazebo + (3,2) → map
+    # origin). Lets AMCL auto-localize at startup instead of needing a
+    # manual RViz 2D Pose Estimate click every demo run.
+    set_initial_pose: true
+    initial_pose:
+      x: 0.0
+      y: 0.0
+      yaw: 0.0
 
 # ----------------------------------------------------------------------------
 # Behavior-tree navigator: which BT XML to run, and which plugins it may use.
