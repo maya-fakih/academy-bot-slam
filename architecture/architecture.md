@@ -45,14 +45,15 @@ This is the `see/sense/think/act` + `orchestrator` shape carried over from the
 `smart_fire_extinguisher` FYP: dispatcher is the orchestrator, executor is the
 "act" layer, Nav2 is the actuator underneath that.
 
-**Open question — dispatcher ↔ executor link.** Leaning: dispatcher is an
-action client to the executor's action server, so the same
-goal/feedback/result shape flows all the way down
-(requester → dispatcher → executor → Nav2). Not yet locked in — revisit once
-the two `.action` definitions (requester-facing and internal) are drafted,
-because if they end up nearly identical we should ask whether the executor
-even needs to be a separate action server or whether a simpler synchronous
-call (still not a topic — see reasoning log) does the job.
+**DECIDED — dispatcher ↔ executor link.** Executor is a plain C++ class the
+dispatcher owns and calls directly (in-process), not a separate node/action
+server. No ROS interface between them — only RequestDelivery and
+ExecuteDelivery face outward to the requester. Rejected the "executor as its
+own action server" option: no requirement calls for it, and it's a second
+action layer stacked for no benefit (dispatcher would need to be both an
+action server and an action client). Race-condition concerns don't apply
+either way — separate processes never shared memory to begin with; this is
+in-process either way now.
 
 **Rejected: topic for dispatcher → executor handoff.** A topic is
 fire-and-forget with no delivery/ack guarantee — wrong fit for "hand off
