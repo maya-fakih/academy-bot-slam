@@ -1,0 +1,15 @@
+dispatcher:
+  ros__parameters:
+    retry_limit: 2
+
+    location_names: ["reception", "lab_bench"]
+
+    locations:
+      reception:
+        x: 1.0
+        y: 2.0
+        yaw: 0.0
+      lab_bench:
+        x: 4.5
+        y: -1.2
+        yaw: 1.57
